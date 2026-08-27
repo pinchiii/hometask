@@ -100,6 +100,7 @@
   .dot{width:6px; height:6px; border-radius:50%}
   .dot.daily{background:var(--c-daily)} .dot.cycle{background:var(--c-cycle)} .dot.adhoc{background:var(--c-adhoc)}
   .cell .cnt{margin-top:auto; font-size:11.5px; color:var(--muted); font-weight:600}
+  .cell .alldone{margin-top:auto; font-size:15px; color:var(--c-daily); font-weight:700; line-height:1}
   .weekgrid .cell{aspect-ratio:auto; min-height:82px}
 
   .detail{margin-top:18px}
@@ -424,11 +425,15 @@ var FIREBASE_CONFIG = {
     if(o.freq==='adhoc'){var d=new Date(o.date+'T00:00:00');return (d.getMonth()+1)+'/'+d.getDate()+' 單次';}
     return '';
   }
-  function dotsHTML(c){var h='';['daily','cycle','adhoc'].forEach(function(cat){var n=Math.min(c[cat],2);for(var i=0;i<n;i++){h+='<span class="dot '+cat+'"></span>';}});return h;}
+  function doneSetFor(isoD){ var o=state.done[isoD]||{}; return {has:function(k){return !!o[k];}}; }
+  function dotsHTML(list){var h='',a=list.slice().sort(function(x,y){return CATORD[x.cat]-CATORD[y.cat];}),n=Math.min(a.length,12);for(var i=0;i<n;i++){h+='<span class="dot '+a[i].cat+'"></span>';}return h;}
   function cell(d,arr){
-    var isoD=iso(d),list=tasksFor(arr,d),n=list.length,c=countByCat(list);
+    var isoD=iso(d),list=tasksFor(arr,d),dset=doneSetFor(isoD);
+    var undone=list.filter(function(t){return !dset.has(t.key);});
     var cls='cell'+(isoD===iso(today)?' is-today':'')+(isoD===selDay?' sel':'');
-    return '<div class="'+cls+'" data-day="'+isoD+'"><span class="dn">'+d.getDate()+'</span>'+(n?'<span class="dots">'+dotsHTML(c)+'</span><span class="cnt">'+n+'</span>':'')+'</div>';
+    var inner='<span class="dn">'+d.getDate()+'</span>';
+    if(list.length){ if(undone.length){ inner+='<span class="dots">'+dotsHTML(undone)+'</span><span class="cnt">'+undone.length+'</span>'; } else { inner+='<span class="alldone">✓</span>'; } }
+    return '<div class="'+cls+'" data-day="'+isoD+'">'+inner+'</div>';
   }
   function taskRow(r,isoD){
     var done=isDone(isoD,r.key), isAdhoc=r.freq==='adhoc';
