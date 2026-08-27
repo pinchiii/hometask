@@ -432,7 +432,7 @@ var FIREBASE_CONFIG = {
     var undone=list.filter(function(t){return !dset.has(t.key);});
     var cls='cell'+(isoD===iso(today)?' is-today':'')+(isoD===selDay?' sel':'');
     var inner='<span class="dn">'+d.getDate()+'</span>';
-    if(list.length){ if(undone.length){ inner+='<span class="dots">'+dotsHTML(undone)+'</span><span class="cnt">'+undone.length+'</span>'; } else { inner+='<span class="alldone">✓</span>'; } }
+    if(list.length){ if(undone.length){ inner+='<span class="dots">'+dotsHTML(undone)+'</span><span class="cnt">'+undone.length+'</span>'; } else { inner+='<span class="alldone">🥳</span>'; } }
     return '<div class="'+cls+'" data-day="'+isoD+'">'+inner+'</div>';
   }
   function taskRow(r,isoD){
