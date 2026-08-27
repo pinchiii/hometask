@@ -192,6 +192,17 @@
   .note .id{display:block; color:var(--muted); margin-top:3px; font-size:13px}
   footer{margin:30px 2px 0; color:var(--muted); font-size:13.5px; text-align:center; line-height:1.8}
   [hidden]{display:none !important}
+  /* 打勾冒愛心動畫 */
+  .heart{position:fixed; z-index:9999; pointer-events:none; will-change:transform,opacity;
+    transform:translate(-50%,-50%); animation:heartfloat .95s ease-out forwards}
+  @keyframes heartfloat{
+    0%{transform:translate(-50%,-50%) scale(.3) rotate(0deg); opacity:0}
+    18%{opacity:1}
+    100%{transform:translate(calc(-50% + var(--tx,0px)), calc(-50% + var(--ty,-60px))) scale(1.15) rotate(var(--rot,0deg)); opacity:0}
+  }
+  @keyframes checkpop{0%{transform:scale(1)}45%{transform:scale(1.28)}100%{transform:scale(1)}}
+  .box.pop{animation:checkpop .34s ease-out}
+  @media (prefers-reduced-motion:reduce){ .heart{display:none} .box.pop{animation:none} }
 </style>
 </head>
 <body>
@@ -503,9 +514,28 @@ var FIREBASE_CONFIG = {
     var cl=e.target.closest('.cell[data-day]');
     if(cl){selDay=cl.getAttribute('data-day');focus=new Date(selDay+'T00:00:00');renderCal();return;}
   });
+  function heartBurst(el){
+    try{ if(window.matchMedia && matchMedia('(prefers-reduced-motion:reduce)').matches) return; }catch(e){}
+    var r=el.getBoundingClientRect(), cx=r.left+r.width/2, cy=r.top+r.height/2;
+    var emo=['💗','💕','💖','🩷','💞'];
+    for(var i=0;i<7;i++){
+      var s=document.createElement('span'); s.className='heart'; s.textContent=emo[i%emo.length];
+      s.style.left=cx+'px'; s.style.top=cy+'px';
+      var ang=-Math.PI/2+(Math.random()-0.5)*1.7, dist=42+Math.random()*48;
+      s.style.setProperty('--tx',(Math.cos(ang)*dist).toFixed(0)+'px');
+      s.style.setProperty('--ty',(Math.sin(ang)*dist-22).toFixed(0)+'px');
+      s.style.setProperty('--rot',((Math.random()-0.5)*60).toFixed(0)+'deg');
+      s.style.fontSize=(15+Math.random()*13).toFixed(0)+'px';
+      s.style.animationDelay=(Math.random()*0.12).toFixed(2)+'s';
+      document.body.appendChild(s);
+      (function(n){ n.addEventListener('animationend',function(){n.remove();}); setTimeout(function(){ if(n.parentNode)n.remove(); },1500); })(s);
+    }
+  }
   document.addEventListener('change', function(e){
     var cb=e.target.closest('input[data-done-key]'); if(!cb) return;
-    setDone(cb.getAttribute('data-done-date'), cb.getAttribute('data-done-key'), cb.checked);
+    var checked=cb.checked;
+    if(checked){ heartBurst(cb); }   /* 先冒愛心（趁元素還在畫面上）再存檔 */
+    setDone(cb.getAttribute('data-done-date'), cb.getAttribute('data-done-key'), checked);
   });
   document.addEventListener('click', function(e){
     var tb=e.target.closest('[data-translate]'); if(!tb) return;
