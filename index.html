@@ -176,9 +176,13 @@
   #app[data-ltab="daily"] #lp-daily,#app[data-ltab="cycle"] #lp-cycle,#app[data-ltab="once"] #lp-once{display:block}
   .rsub{font-family:var(--font-display); font-weight:600; font-size:16px; color:var(--muted); margin:16px 2px 8px}
   .rlist{list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:9px}
-  .rule{display:grid; grid-template-columns:1fr auto auto; gap:6px; align-items:start;
+  .rule{display:grid; grid-template-columns:auto 1fr auto auto; gap:6px; align-items:start;
     background:var(--surface); border:1px solid var(--line); border-left:5px solid var(--line);
-    border-radius:14px; padding:12px 10px 12px 14px; box-shadow:var(--shadow)}
+    border-radius:14px; padding:12px 10px 12px 12px; box-shadow:var(--shadow); touch-action:pan-y}
+  .grip{touch-action:none; cursor:grab; color:var(--muted); font-size:19px; line-height:1; width:26px;
+    display:flex; align-items:center; justify-content:center; align-self:stretch; user-select:none; -webkit-user-select:none}
+  .grip:active{cursor:grabbing}
+  .rule.dragging{opacity:.9; box-shadow:0 10px 26px rgba(0,0,0,.22); background:var(--surface-2); position:relative; z-index:50}
   .rule[data-freq="daily"]{border-left-color:var(--c-daily)}
   .rule[data-freq="interval"],.rule[data-freq="weekly"],.rule[data-freq="monthly"]{border-left-color:var(--c-cycle)}
   .rule[data-freq="adhoc"]{border-left-color:var(--c-adhoc)}
@@ -234,7 +238,10 @@
         <div class="add-row"><input class="f-zh" placeholder="工作內容（中文）"></div>
         <div class="add-row"><input class="grow f-id" placeholder="Tugas (Bahasa Indonesia)"><button class="tbtn" type="button" data-translate>譯 ➜ 印尼文</button></div>
         <div class="add-row"><select class="f-freq"></select></div>
-        <div class="add-row"><input type="date" class="f-date" hidden aria-label="日期 Tanggal"></div>
+        <div class="f-dateblock" hidden>
+          <div class="hint f-datehint" style="margin:2px 2px 5px"></div>
+          <div class="add-row"><input type="date" class="grow f-date" aria-label="日期 Tanggal"></div>
+        </div>
         <div class="add-row"><input class="f-time" placeholder="時間／時段（選填）Waktu"></div>
         <div class="add-row" style="gap:8px">
           <button class="add-btn grow" type="button" data-uadd-btn>＋ 新增 Tambah</button>
@@ -390,13 +397,17 @@ var FIREBASE_CONFIG = {
     else { state.done[date]=state.done[date]||{}; if(val) state.done[date][key]=true; else delete state.done[date][key]; saveLocal(); renderAll(); }
   }
   function isDone(date,key){ return !!(state.done[date] && state.done[date][key]); }
+  function updateOrders(map){
+    if(USE_FB){ var u={}; Object.keys(map).forEach(function(k){ u[k+'/order']=map[k]; }); db.ref('tasks').update(u); }
+    else { Object.keys(map).forEach(function(k){ if(state.tasks[k]) state.tasks[k].order=map[k]; }); saveLocal(); renderAll(); }
+  }
 
   /* ================= 計算 ================= */
   function tasksArray(){
     return Object.keys(state.tasks).map(function(k){ var o=state.tasks[k]; return {
       key:k, freq:o.freq, cat:catOf(o.freq), time:o.time||'',
       weekday:o.weekday, monthday:o.monthday, interval:o.interval, anchor:o.anchor, date:o.date,
-      zh:o.zh||'', id:o.id||'', created:o.created||0 }; });
+      zh:o.zh||'', id:o.id||'', created:o.created||0, order:o.order }; });
   }
   function occurs(r,d){
     if(!(r.zh||r.id)) return false;
@@ -481,7 +492,8 @@ var FIREBASE_CONFIG = {
   }
 
   function ruleRow(o){
-    return '<li class="rule" data-key="'+esc(o.key)+'" data-freq="'+esc(o.freq)+'"><div class="rbody">'
+    var grip = (o.freq!=='adhoc') ? '<span class="grip" data-grip aria-label="拖曳排序">≡</span>' : '<span class="grip"></span>';
+    return '<li class="rule" data-key="'+esc(o.key)+'" data-freq="'+esc(o.freq)+'">'+grip+'<div class="rbody">'
       +'<span class="rbadge">'+esc(badgeFor(o))+'</span><span class="zh">'+esc(o.zh)+'</span>'
       +(o.id?'<span class="id">'+esc(o.id)+'</span>':'')+'</div>'
       +'<button class="edit" type="button" data-edit-key="'+esc(o.key)+'" aria-label="編輯">✎</button>'
@@ -489,11 +501,12 @@ var FIREBASE_CONFIG = {
   }
   function renderList(){
     var arr=tasksArray();
-    function bySort(a,b){return (a.created||0)-(b.created||0);}
+    function ordVal(t){return t.order!=null?Number(t.order):(t.created||0);}
+    function bySort(a,b){return ordVal(a)-ordVal(b);}
     var daily=arr.filter(function(r){return r.freq==='daily';}).sort(bySort);
     var iv=arr.filter(function(r){return r.freq==='interval';}).sort(bySort);
-    var wk=arr.filter(function(r){return r.freq==='weekly';}).sort(function(a,b){return (a.weekday-b.weekday)||bySort(a,b);});
-    var mo=arr.filter(function(r){return r.freq==='monthly';}).sort(function(a,b){return (a.monthday-b.monthday)||bySort(a,b);});
+    var wk=arr.filter(function(r){return r.freq==='weekly';}).sort(bySort);
+    var mo=arr.filter(function(r){return r.freq==='monthly';}).sort(bySort);
     var once=arr.filter(function(r){return r.freq==='adhoc';}).sort(function(a,b){return (a.date<b.date?-1:a.date>b.date?1:0);});
     document.getElementById('lp-daily').innerHTML='<ul class="rlist">'+(daily.length?daily.map(ruleRow).join(''):'<div class="empty">還沒有每天工作</div>')+'</ul>';
     document.getElementById('lp-cycle').innerHTML=
@@ -562,24 +575,30 @@ var FIREBASE_CONFIG = {
     for(var dd=1;dd<=28;dd++){opts+='<option value="monthly:'+dd+'">每月 '+dd+' 號</option>';}
     opts+='</optgroup><option value="once">單次（指定日期）· Sekali</option>';
     freqSel.innerHTML=opts;
-    freqSel.addEventListener('change',function(){ dateI.hidden=(freqSel.value!=='once'); });
+    freqSel.addEventListener('change', updateDateField);
   })();
+  function updateDateField(){
+    var v=freqSel.value, blk=panel.querySelector('.f-dateblock'), ht=panel.querySelector('.f-datehint');
+    if(v==='once'){ blk.hidden=false; ht.textContent='選擇日期 · Pilih tanggal'; }
+    else if(v.indexOf('interval:')===0){ blk.hidden=false; ht.textContent='從哪天開始（選填，預設今天）· Mulai dari (opsional)'; }
+    else { blk.hidden=true; }
+  }
   function parseForm(){
     var zh=(panel.querySelector('.f-zh').value||'').trim(), id=(panel.querySelector('.f-id').value||'').trim();
     var time=(panel.querySelector('.f-time').value||'').trim(), val=freqSel.value;
     if(!zh&&!id){ panel.querySelector('.f-zh').focus(); return null; }
     var o={time:time,zh:zh,id:id};
     if(val==='daily'){o.freq='daily';}
-    else if(val.indexOf('interval:')===0){o.freq='interval';o.interval=parseInt(val.split(':')[1],10);o.anchor=iso(today);}
+    else if(val.indexOf('interval:')===0){o.freq='interval';o.interval=parseInt(val.split(':')[1],10);o.anchor=(dateI.value||iso(today));}
     else if(val.indexOf('weekly:')===0){o.freq='weekly';o.weekday=parseInt(val.split(':')[1],10);}
     else if(val.indexOf('monthly:')===0){o.freq='monthly';o.monthday=parseInt(val.split(':')[1],10);}
-    else if(val==='once'){var dv=dateI.value; if(!dv){dateI.hidden=false;dateI.focus();return null;} o.freq='adhoc';o.date=dv;}
+    else if(val==='once'){var dv=dateI.value; if(!dv){updateDateField();dateI.focus();return null;} o.freq='adhoc';o.date=dv;}
     return o;
   }
   function resetPanel(){
     panel.removeAttribute('data-editing');
     panel.querySelector('.f-zh').value='';panel.querySelector('.f-id').value='';panel.querySelector('.f-time').value='';
-    freqSel.selectedIndex=0; dateI.hidden=true; dateI.value='';
+    freqSel.selectedIndex=0; dateI.value=''; panel.querySelector('.f-dateblock').hidden=true;
     uSum.textContent='新增工作 · Tambah Tugas'; uBtn.textContent='＋ 新增 Tambah'; uCancel.hidden=true;
   }
   function freqSelVal(o){
@@ -593,7 +612,8 @@ var FIREBASE_CONFIG = {
     var o=state.tasks[key]; if(!o) return;
     panel.querySelector('.f-zh').value=o.zh||''; panel.querySelector('.f-id').value=o.id||''; panel.querySelector('.f-time').value=o.time||'';
     freqSel.value=freqSelVal(o);
-    if(o.freq==='adhoc'){ dateI.hidden=false; dateI.value=o.date||''; } else { dateI.hidden=true; dateI.value=''; }
+    dateI.value = (o.freq==='adhoc') ? (o.date||'') : (o.freq==='interval' ? (o.anchor||'') : '');
+    updateDateField();
     panel.setAttribute('data-editing',key);
     uSum.textContent='編輯工作 · Edit（時間／內容／循環）'; uBtn.textContent='✓ 儲存修改 Simpan'; uCancel.hidden=false;
     panel.open=true;
@@ -623,6 +643,31 @@ var FIREBASE_CONFIG = {
       return;
     }
   });
+
+  /* ---- 拖曳排序（握把 ≡，支援手機觸控）---- */
+  var drag=null;
+  document.addEventListener('pointerdown', function(e){
+    var g=e.target.closest('[data-grip]'); if(!g) return;
+    var li=g.closest('.rule'); if(!li) return;
+    e.preventDefault();
+    drag={li:li, ul:li.parentNode};
+    li.classList.add('dragging');
+    try{ g.setPointerCapture(e.pointerId); }catch(_){}
+  });
+  document.addEventListener('pointermove', function(e){
+    if(!drag) return; e.preventDefault();
+    var y=e.clientY, sibs=[].slice.call(drag.ul.children).filter(function(n){return n.classList&&n.classList.contains('rule')&&n!==drag.li;}), placed=false;
+    for(var i=0;i<sibs.length;i++){ var r=sibs[i].getBoundingClientRect(); if(y<r.top+r.height/2){ drag.ul.insertBefore(drag.li,sibs[i]); placed=true; break; } }
+    if(!placed) drag.ul.appendChild(drag.li);
+  }, {passive:false});
+  function endDrag(){
+    if(!drag) return; var ul=drag.ul; drag.li.classList.remove('dragging'); drag=null;
+    var map={}, idx=0;
+    [].slice.call(ul.children).forEach(function(li){ if(li.classList&&li.classList.contains('rule')){ map[li.getAttribute('data-key')]=idx++; } });
+    updateOrders(map);
+  }
+  document.addEventListener('pointerup', endDrag);
+  document.addEventListener('pointercancel', endDrag);
 
   initStore();
 })();
